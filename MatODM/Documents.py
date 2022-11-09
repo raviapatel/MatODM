@@ -337,7 +337,6 @@ class Document(metaclass = MetaODM):
     
     def insert(self,db:dbProtocol, check_duplicates=True):
         return db.insert(self)
-
     
 class BibtexDocument(Document):
     pass 
