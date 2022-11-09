@@ -338,8 +338,40 @@ class Document(metaclass = MetaODM):
     def insert(self,db:dbProtocol, check_duplicates=True):
         return db.insert(self)
     
-class BibtexDocument(Document):
-    pass 
+    
+class Article(Document): 
+    """
+    Journal article
+    """
+    author:str
+    title:str
+    year:str
+    volume:str
+    pages:str
+    journal:str
+    publisher:str=None
+    abstract:str= None
+    comments:str = None
+    keywords:str = None
+    doi:str = None
+
+class Book(Document):
+    """
+    Book
+    """
+    author:str
+    title:str
+    year:str
+    publisher:str=None
+    address:str=None  
+
+#TODO: I don't think  inproceedings inputs are correct check again. NODMally editor and place of conference are also relevant info        
+class InProceedings(Document):
+    author:str
+    title:str
+    booktitle:str
+    year:str
+    pages:str=None
 
 class InternalProject(Document):
     name:str
@@ -347,12 +379,18 @@ class InternalProject(Document):
     funded_by:str=None
     project_duration:str=None
 
+
+def bibtex2doc(self,bibtextfile):
+    pass 
+    #TODO:still to implement bibtex 
+    
+
 class ConstituentMaterial(Document):
-    name:str=None
+    name:str
     description:str = None
+    physical_state:str=None
     oxides_composition:Dict[str,fld.PhysicalQty] = None
     element_composition:Dict[str,fld.PhysicalQty] = None
-    classification:str=None
     
 class Composite(Document):
     relational_fields = ['constituents']
@@ -385,8 +423,7 @@ class ExperimentResult(Document):
     measurement_dates:List[str]=None  
     protocol:Protocol =None
     sample:Sample = None
-    reference:Union[InternalProject,BibtexDocument]
-
+    reference:Union[InternalProject,Article,Book,InProceedings]
     
 #below is plugin type interface for user defined documents
 try:
@@ -404,7 +441,6 @@ def add_multiple_user_doc_from_module(docnames:list, docmodulepath:str):
     existing_user_docs = json2dict("user_docs.json")
     existing_user_docs.update({docname:docmodulepath for docname in docnames})
     dict2json(existing_user_docs, "user_docs.json")
-
 
 def delete_user_doc(docname:str):
     existing_user_docs = json2dict("user_docs.json")
