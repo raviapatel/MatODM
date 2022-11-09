@@ -27,6 +27,7 @@ PREFIXES = {
     'E': UnitPrefix(symbol='E', name='exa', factor=D('1E+18')),
     'Z': UnitPrefix(symbol='Z', name='zetta', factor=D('1E+21')),
     'Y': UnitPrefix(symbol='Y', name='yotta', factor=D('1E+24')),
+        
 }
 
 # ----------
@@ -86,8 +87,13 @@ UNITS = {
     'bar': Unit('bar', 'bar', M=1, L=-1, T=-2, coef=D('1E5')),
     'min': Unit('min', 'minute', T=1, coef=D('60')),
     'h': Unit('h', 'hour', T=1, coef=D('3600')),
+    
+    #MatODM units
+    #-----------------
     'day': Unit('day', 'day', T=1, coef=D('86400')),
     'year': Unit('year', 'year', T=1, coef=D('31536000')),
-
+    'liter': Unit('liter', 'liter', L=3, coef=D('1E-3')),
+    'wt%': Unit('wt%', 'weight per weight of material in percentage'),
+    'vol%': Unit('vol%', 'volume per volume of material in percentage'),
 
 }

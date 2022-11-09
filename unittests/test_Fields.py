@@ -37,8 +37,8 @@ class TestFieldSerialization(unittest.TestCase):
         seive_size = fld.PhysicalQty([0.1,0.5,1],unit="µm")
         self._assert_equal(fld.ParticleSizeDistribution(perc_passing,seive_size))
         
-    def test_MultiEntryField(self):
-        a = fld.MultiEntryField()
+    def test_ExperimentalObservations(self):
+        a = fld.ExperimentalObservations()
         a.add_entry("test1", strength = fld.PhysicalQty(100,"MPa"))
         self._assert_equal(a)
 
@@ -75,10 +75,10 @@ class TestFielddoc2Obj(unittest.TestCase):
         a = fld.RelationalData("12345", "test_doc", "test")
         self._assert_equal(fld.RelationalData,a)
 
-    def test_MultiEntryField(self):
-        a = fld.MultiEntryField()
+    def test_ExperimentalObservations(self):
+        a = fld.ExperimentalObservations()
         a.add_entry("test1", strength = fld.PhysicalQty(100,"MPa"))
-        self._assert_equal(fld.MultiEntryField, a)
+        self._assert_equal(fld.ExperimentalObservations, a)
     def _assert_equal(self, fieldclass,instance):
         self.assertEqual(instance,fieldclass.doc2obj(instance.serialize()),"serialized object is not same as the retrived object")
 

@@ -183,7 +183,7 @@ class ArangoCollection(abstract.DatabaseCollection):
         """    
         return self.dbColInst.get(docID,*args,**kwargs)
     
-    def get_doc_with_key(self,keyname:str,keyval:str)->List[dict]:
+    def get_doc_with_key(self,keyname:str,keyval:Union[str,int,bool,float])->List[dict]:
         """
         Get document with a key
 

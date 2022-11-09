@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
-from typing import Union
+from typing import Union, List
 from copy import copy
-from MatODM import Fields as fld
 from .UnitConverter.converter import convert2float
 from . import Utilities as utl
 from datetime import datetime as _datetime
@@ -13,6 +12,160 @@ import importlib
 import warnings
 
 RelationalData=utl.RelationalData
+
+class _Serializer:
+    """
+    class holding methods repsonsible to serialize field objects to json
+    
+    Methods
+    -------
+    
+    serialize (annotations:dict[str,type],obj:...)-> dict
+        serializes any field object to json 
+    
+    serialize_list_and_dict: seializes 
+    """
+    _types_excluded_from_serialization = (int,float,str,list,dict,Union[float,int], np.ndarray,
+                                         Union[float,int, list, np.ndarray], tuple,bool)
+    
+    def serialize(annotations:dict[str,type], obj:...)->dict:
+        """
+        serializes object into json 
+        
+        Parameters
+        ----------
+        annotations : dict[str,type]
+            DESCRIPTION.
+        obj : ...
+            Object to be serialized.
+
+        Returns
+        -------
+        dict
+            Serialized json dict.
+
+        """
+        output = {}
+        for k,fieldtype in annotations.items():
+            val = copy(getattr(obj,k))
+            if (val is not None):
+                if fieldtype not in _Serializer._types_excluded_from_serialization:
+                    if hasattr(fieldtype,"__origin__"):
+                        if fieldtype.__origin__ in (list,dict):
+                            val = _Serializer.serialize_list_and_dict(val)
+                        else:
+                            val =val.serialize()
+                    else:
+                        val = val.serialize()
+                if type(val)== np.ndarray:
+                    val = list(val)
+                output[k] = val
+        output['ODM_field_type']= obj.ODM_field_type
+        return output
+    
+    @staticmethod
+    def serialize_list_and_dict(inobj: Union[list,dict])->Union[list,dict]:
+        """serializes list  or dict. This is specially required for List or Dict object of typing
+        which might contain list or dict of complex fields"""
+        base_types = (int,float,str)
+        if isinstance(inobj,list):
+            output = []
+            for obj in inobj:
+                if isinstance(obj,base_types):
+                    output.append(obj)
+                elif isinstance( obj,(list,dict)):
+                    raise ValueError("Cannot  serialize this data. Nested dict and list are not  allowed consider creating user-defined field")
+                else:
+                    output.append(obj.serialize())
+            return output
+        elif isinstance(inobj,dict):
+            output = {}
+            for key,obj in inobj.items():
+                if isinstance(obj,base_types):
+                    output[key] = obj
+                elif isinstance( obj,(list,dict)):
+                    raise ValueError("Cannot  serialize this data. Nested dict and list are not  allowed consider creating user-defined field")
+                else:
+                    output[key] = obj.serialize()
+            return output    
+
+class _DeSerializer:
+    _types_excluded_from_serialization = (int,float,str,list,dict,Union[float,int], np.ndarray,
+                                         Union[float,int, list, np.ndarray], tuple,bool)
+    
+    @staticmethod
+    def deserialize(cls, doc:dict):
+        """
+        converts the json document back to a field class instance
+
+        Parameters
+        ----------
+        cls :field class
+            class to which json document is to be converted back to.
+        doc : dict
+            json document.
+
+        Returns
+        -------
+        ...
+            Instance of field class.
+
+        """
+        annotations = cls.annotations
+        indict  = doc.copy()
+        for key in cls._extra_info_stored: indict.pop(key,None)
+        for (name, fieldtype) in annotations.items():
+            val = doc.get(name,None)
+            if (fieldtype not in _DeSerializer._types_excluded_from_serialization) and (val != None):
+                if hasattr(fieldtype,"__origin__"):
+                    if fieldtype.__origin__ in (list,dict):
+                        val = _DeSerializer.deserialize_list_and_dict(val)
+                    else:
+                        ftype = val.pop("ODM_field_type", None)
+                        ftype = globals()[ftype]
+                        val = ftype.doc2obj(val)                        
+                else:
+                    ftype = val.pop("ODM_field_type", None)
+                    ftype = globals()[ftype]
+                    val = ftype.doc2obj(val)
+                indict[name]=val
+        return cls(**indict)
+    
+    @staticmethod
+    def deserialize_list_and_dict(inobj:Union[list,dict])->[list,dict]:
+        """
+        Converts list  or dict of complex json document back to object.
+
+        Parameters
+        ----------
+        inobj : Union[list,dict]
+            list or dict with complex json documents.
+
+        Returns
+        -------
+        [list,dict]
+            list or dict with json document converted back to object.
+
+        """
+        _types_excluded_from_serialization = (int,float,str)
+        if isinstance(inobj,list):
+            output = []
+            for obj in inobj:
+                if isinstance(obj,_types_excluded_from_serialization):
+                    output.append(obj)
+                else:
+                    objtype = globals()[obj["ODM_field_type"]]
+                    output.append(objtype.doc2obj(obj))
+            return output        
+        elif isinstance(inobj,dict):
+            output = {}
+            for key,obj in inobj.items():
+                if isinstance(obj,_types_excluded_from_serialization):
+                    output[key]=obj
+                else:
+                    objtype =  globals()[obj["ODM_field_type"]]
+                    output[key]=objtype.doc2obj(obj)
+            return output
 
 class DateTime(_datetime):
     """
@@ -75,17 +228,36 @@ class DateTime(_datetime):
         output = self.strftime("%d-%b-%Y  %H:%M:%S.%f (%Z)")
         return output
     
+    @classmethod
+    def str2obj(cls,string):
+        return cls.strptime(string,"%d-%b-%Y  %H:%M:%S.%f (%Z)")
+    
     @staticmethod
     def all_time_zones():
         return pytz.all_timezones
-        
+
+class DateTimeArray(object):
+    """This is a simple date time array object which can be used to have list of dates from 
+    """
+    values: List[DateTime]
+    ODM_field_type = "DateTimeArray"
+    def serialize(self):
+        doc = {}
+        doc["values"]= [val.timestamp for val in self.values]
+        doc["ODM_field_type"] = self.ODM_field_type
+        return doc 
+    
+    @classmethod
+    def doc2obj(cls,indoc:list[str]):
+        doc = indoc.copy()
+        doc["values"] = [DateTime.str2obj(string) for string in doc["values"]]
+        return cls(doc)
+
         
 class AbstractField(metaclass=utl.MetaODM):
     """
     This is a abstract class for fields
     """
-    _types_excluded_from_serialization = (int,float,str,list,dict,Union[float,int], np.ndarray,
-                                         Union[float,int, list, np.ndarray], tuple,bool)
     _extra_info_stored = ["ODM_field_type"]
 
     def __post_init__(self):
@@ -95,24 +267,8 @@ class AbstractField(metaclass=utl.MetaODM):
         """
         serializes the object into a document  
         """
-        output = {}
-        annotations = self.annotations
-        for k,fieldtype in annotations.items():
-            val = copy(getattr(self,k))
-            if (val is not None):
-                if fieldtype not in self._types_excluded_from_serialization:
-                    if hasattr(fieldtype,"__origin__"):
-                        if fieldtype.__origin__ in (list,dict):
-                            val = self._serialize_list_and_dict(val)
-                        else:
-                            val =val.serialize()
-                    else:
-                        val = val.serialize()
-                if type(val)== np.ndarray:
-                    val = list(val)
-                output[k] = val
-        output['ODM_field_type']= self.ODM_field_type
-        return output
+        return  _Serializer.serialize(self.annotations,self)
+          
     
     def convert_to(self,newunit):
         """
@@ -125,75 +281,7 @@ class AbstractField(metaclass=utl.MetaODM):
         """
         converts document into an object
         """
-        annotations = cls.annotations
-        indict  = doc.copy()
-        for key in cls._extra_info_stored: indict.pop(key,None)
-        for (name, fieldtype) in annotations.items():
-            val = doc.get(name,None)
-            if (fieldtype not in cls._types_excluded_from_serialization) and (val != None):
-                if hasattr(fieldtype,"__origin__"):
-                    if fieldtype.__origin__ in (list,dict):
-                        val = cls._doc2obj_list_and_dict(val)
-                    else:
-                        ftype = val.pop("ODM_field_type", None)
-                        ftype = getattr(fld,ftype)
-                        val = ftype.doc2obj(val)                        
-                else:
-                    ftype = val.pop("ODM_field_type", None)
-                    ftype = getattr(fld,ftype)
-                    val = ftype.doc2obj(val)
-                indict[name]=val
-        return cls(**indict)
-
-    @staticmethod
-    def _serialize_list_and_dict(inobj: Union[list,dict])->Union[list,dict]:
-        """serializes list  or dict. This is specially required for List or Dict object of typing
-        which might contain list or dict of complex fields"""
-        _types_excluded_from_serialization = (int,float,str)
-        if isinstance(inobj,list):
-            output = []
-            for obj in inobj:
-                if isinstance(obj,_types_excluded_from_serialization):
-                    output.append(obj)
-                elif isinstance( obj,(list,dict)):
-                    raise ValueError("Cannot  serialize this data. Nested dict and list are not  allowed consider creating user-defined field")
-                else:
-                    output.append(obj.serialize())
-            return output
-        elif isinstance(inobj,dict):
-            output = {}
-            for key,obj in inobj.items():
-                if isinstance(obj,_types_excluded_from_serialization):
-                    output[key] = obj
-                elif isinstance( obj,(list,dict)):
-                    raise ValueError("Cannot  serialize this data. Nested dict and list are not  allowed consider creating user-defined field")
-                else:
-                    output[key] = obj.serialize()
-            return output
-
-    @staticmethod 
-    def _doc2obj_list_and_dict(inobj: Union[list,dict])->Union[list,dict]:
-        """serializes list  or dict. This is specially required for List or Dict object of typing
-        which might contain list or dict of complex fields"""
-        _types_excluded_from_serialization = (int,float,str)
-        if isinstance(inobj,list):
-            output = []
-            for obj in inobj:
-                if isinstance(obj,_types_excluded_from_serialization):
-                    output.append(obj)
-                else:
-                    objtype = getattr(fld,obj["ODM_field_type"])
-                    output.append(objtype.doc2obj(obj))
-            return output        
-        elif isinstance(inobj,dict):
-            output = {}
-            for key,obj in inobj.items():
-                if isinstance(obj,_types_excluded_from_serialization):
-                    output[key]=obj
-                else:
-                    objtype = getattr(fld,obj["ODM_field_type"])
-                    output[key]=objtype.doc2obj(obj)
-            return output
+        return _DeSerializer.deserialize(cls, doc)
 
 class PhysicalQty(AbstractField):
     """
@@ -204,10 +292,25 @@ class PhysicalQty(AbstractField):
     std_dev:Union[float,int]=None
     experimental_technique:str=None
     preferred_unit:str=None
+    dimensions:dict = None 
+    check_dimensionality:bool=False
     
     def __post_init__(self, preferred_unit=None):
-        
         super().__post_init__()
+        #apply dimensionality check if available
+        if self.check_dimensionality:
+            try:
+                assert self.dimensions!=None
+            except AssertionError:
+                raise ValueError("cannot check dimesnionality as dimensions for the physical qunatity are not provided ")
+
+            try:
+                base_unit = self._get_base_unit_from_dimensions()
+                convert2float(self.value, self.unit, base_unit)
+            except ValueError:
+                raise ValueError(f"Given unit:{self.unit} is not compatible with the dimensions:{self.dimensions} for the pyhsiscal quantity")
+        #set preferred unit is given in post init and then if there is already preferred unit
+        #convert value to that unit
         if preferred_unit is not None:
             self.preferred_unit = preferred_unit
         if type(self.value)== list:
@@ -246,6 +349,12 @@ class PhysicalQty(AbstractField):
                 return False
         else:
             return False
+    
+    def __len__(self):
+     if type(self.value) == int or float:
+         raise TypeError("This is a zero dimensional physical quantity")
+     else:
+         return len(self.value)
 
     def __le__(self,other):
         if  self._check_type(other):
@@ -368,6 +477,22 @@ class PhysicalQty(AbstractField):
         return (type(other).__name__ in ["UserDefinedPhysicalQty", "PhysicalQty"]
                 or other.__class__.__mro__[1].__name__ in ["UserDefinedPhysicalQty", "PhysicalQty"])
     
+    def _get_base_unit_from_dimensions(self):
+        """get base unit to check dimensionality of the given unit"""
+        SI_units = {    'L':'m', #length
+                        'M':'g', #mass
+                        'T':'s', #time
+                        'I':'A', #current
+                        'THETA':'K', #temprature
+                        'N':'mol', #amount of substance 
+                        'J':'cd', # luminous intensity 
+                        }
+        base_unit = ""
+        for k,v in self.dimensions:
+            if v!=0 :
+                base_unit += f"{SI_units[k]}^{v} "
+        return base_unit
+
 class PhysicalQtyRange(AbstractField):
     """
     Field for giving range of values for physical qunatities instead of specific number
@@ -397,99 +522,89 @@ class PhysicalQtyRange(AbstractField):
             return (convert2float(self.min_value, self.unit, desiredunit),
                     convert2float(self.max_value, self.unit, desiredunit))            
 
-class ParticleSizeDistribution(AbstractField):
+class Duration(PhysicalQty):
     """
-    Field to store particle size distribution 
     """
-    perc_passing: Union[PhysicalQty,PhysicalQtyRange]
-    sieve_size: Union[PhysicalQty,PhysicalQtyRange]
-    experimental_technique: str = None
+    dimensions:dict = {"T":1} 
+    check_dimensionality:bool=True
     
+class SpatialCoordinates(PhysicalQty):
+    dimensions:dict={"L":1}
+    check_dimensionality:bool=True
 
     
-class MultiEntryField(AbstractField):
-    """
-    A field to register multiple data entries e.g. multiple measurements of same quantity.
-    """
-    entries: dict = None
-    def add_entry(self, entry_id,**kwargs):
-        """
-        add data entry i the field
-        """
-        if self.entries == None: self.entries = {}
-        self.entries[entry_id]= {} 
-        for key,val in kwargs.items():
-            self.entries[entry_id][key]=val
-    
-    def serialize(self):
-        """
-        serialize the object to document
-        """
-        if self.entries is None: return 
-        output = {}
-        for k in self.entries.keys():
-            output[k] = {}
-            for key,val in self.entries[k].items():
-                if val is not None:
-                    if type(val) not in self._types_excluded_from_serialization:
-                        if type(val)== np.ndarray:
-                            val = list(val)
-                        else:
-                            val = val.serialize()
-                    output[k][key] = val
-            output['ODM_field_type']= type(self).__name__
-        return output
-    
-    @classmethod
-    def doc2obj(cls,doc:dict):
-        """
-        convert document to object
-        """
-        inst = cls()
-        indict = doc.copy()
-        for k in cls._extra_info_stored: indict.pop(k,None)
-        for k,v in indict.items():
-            v = cls._entries_doc2obj(v)                
-            inst.add_entry(k,**v)
-        return inst
+class TimeSeries(AbstractField):
+    time:Union[Duration,DateTimeArray]
+    value:Union[PhysicalQty,List[PhysicalQty]]
+    def __post_init__(self):
+        super().__post_init__()
+        try:
+            assert len(self.time)==len(self.value)
+        except TypeError:
+            raise TypeError("Time and value in time series dont have same dimensions")
             
-    @staticmethod       
-    def _entries_doc2obj(doc):
-        """
-        a helper class to help to convert each entry in the doc to object
-        """
-        indict = doc.copy()
-        for (k, v) in indict.items():
-            if type(v).__name__=="dict":
-                if "ODM_field_type" in v:
-                    ftype = v.pop("ODM_field_type")
-                    ftype = getattr(fld,ftype)
-                    v = ftype.doc2obj(v)
-                    indict[k]=v
-        return indict
-        
+class Profile(AbstractField):
+    x:SpatialCoordinates
+    value:Union[PhysicalQty,List[PhysicalQty]]
+    def __post_init__(self):
+        super().__post_init__()
+        try:
+            assert len(self.x)==len(self.value)
+        except TypeError:
+            raise TypeError("location and value in time series does not have same dimensions")
+            
+class Profile2D(AbstractField):
+    x:SpatialCoordinates
+    y:SpatialCoordinates
+    value:Union[PhysicalQty,List[PhysicalQty]]
+    def __post_init__(self):
+        super().__post_init__()
+        try:
+            assert len(self.x)==len(self.y)==len(self.value)
+        except TypeError:
+            raise TypeError("x,y and value in time series does not have same dimensions" )   
+
+class Profile3D(AbstractField):
+    x:SpatialCoordinates
+    y:SpatialCoordinates
+    z:SpatialCoordinates
+    value:Union[PhysicalQty,List[PhysicalQty]]
+    def __post_init__(self):
+        super().__post_init__()
+        try:
+            assert len(self.x)==len(self.y)==len(self.value)
+        except TypeError:
+            raise TypeError("x,y and value in time series does not have same dimensions" ) 
+            
 class ExperessionField:
     """
     Expression fields are used to assign AbstractField in template of the class. This template is then used to
     generate query.
     """
     _types_excluded_from_serialization = (int,float,str,list,dict,np.ndarray)
-    def __init__(self):
-         self.operators = {}
+    def __init__(self,name,dtype):
+        self.name = name
+        self.dtype = dtype
+        self.operators = {}
               
     def __le__(self,other):
+        utl.check_annotation(self.name,other, self.dtype)
         self._write_operator("le", other)
             
     def __ge__(self,other):
+        utl.check_annotation(self.name,other, self.dtype)
         self._write_operator("ge", other)
 
     def __lt__(self,other):
+        utl.check_annotation(self.name,other, self.dtype)
         self._write_operator("lt", other)
 
     def __gt__(self,other):
+        utl.check_annotation(self.name,other, self.dtype)
         self._write_operator("gt", other)
 
     def __eq__(self,other):
+        utl.check_annotation(self.name,other, self.dtype)
         self._write_operator("eq", other)
         
     def _write_operator(self,operator,other):
@@ -510,13 +625,14 @@ except FileNotFoundError:
 #these are factory functions to initalize physical quantities
 def _user_defined_physical_qty(name,preferred_unit):
     """returns custom PhysicalQty child class for user defined physical qunatities"""
-    class UserDefinedPhysicalQty(fld.PhysicalQty):
+    class UserDefinedPhysicalQty(PhysicalQty):
         __post_init__ = functools.partialmethod(PhysicalQty.__post_init__, preferred_unit = preferred_unit)
     return UserDefinedPhysicalQty
 
+
 def _user_defined_physical_qty_range(name,preferred_unit):
     """returns custom PhysicalQtyRange child class for user defined physical qunatities"""
-    class UserDefinedPhysicalQtyRange(fld.PhysicalQtyRange):
+    class UserDefinedPhysicalQtyRange(PhysicalQtyRange):
         __post_init__ = functools.partialmethod(PhysicalQtyRange.__post_init__, preferred_unit = preferred_unit)
     return UserDefinedPhysicalQtyRange
 
@@ -537,7 +653,40 @@ def add_user_fields(field_name:str,module_path:str):
     existing_user_fields = utl.json2dict("user_fields.json")
     existing_user_fields["user_defined_fields"].update({field_name:module_path})
     utl.dict2json(existing_user_fields, "user_fields.json")
- 
+
+#registry function to delete user defined quantity
+def delete_user_quantity(name:str):
+    existing_user_fields = utl.json2dict("user_fields.json")
+    existing_user_fields["user_defined_phsical_quantities"].pop(name,None)
+    utl.dict2json(existing_user_fields, "user_fields.json")
+
+#registry function to delete all user defined quantites 
+def delete_all_user_quantities():
+    existing_user_fields = utl.json2dict("user_fields.json")
+    existing_user_fields["user_defined_phsical_quantities"]={}
+    utl.dict2json(existing_user_fields, "user_fields.json")
+
+#registry function to delete user defined fields
+def delete_user_field(field_name:str):
+    """
+    add external fields from user defined modules     
+    """
+    existing_user_fields = utl.json2dict("user_fields.json")
+    existing_user_fields["user_defined_fields"].pop(field_name,None)
+    utl.dict2json(existing_user_fields, "user_fields.json")
+#registry function to delete all user defined fields
+def delete_all_user_fields():
+     """
+     add external fields from user defined modules     
+     """
+     existing_user_fields = utl.json2dict("user_fields.json")
+     existing_user_fields["user_defined_fields"]={}
+     utl.dict2json(existing_user_fields, "user_fields.json")
+
+#registry function to clear everything related to user defined fields and qty
+def delete_all_user_fields_and_quantities():
+    user_fields = {"user_defined_phsical_quantities":{},"user_defined_fields":{}}
+    utl.dict2json(user_fields, "user_fields.json")
 
 #function to load user defined physical qunatities
 _user_fields =  utl.json2dict("user_fields.json")

@@ -127,10 +127,11 @@ def set_property(name):
     Function decorator to set property for the ODM metaclasses
     """
     def setter(self,val):
-        if check_annotation(name,val,self.annotations[name]):
-            return setattr(self,"_"+name,val)
-        else:
-            return setattr(self,"_"+name,val)
+        check_annotation(name,val,self.annotations[name])
+        if hasattr(self.field_validators):
+            validate = self.field_validators.get(name,None)
+            if validate!=None: validate
+        return setattr(self,"_"+name,val)
     return setter
 
 def get_property(name):

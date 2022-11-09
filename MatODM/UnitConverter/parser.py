@@ -32,7 +32,7 @@ class QuantityParser(object):
 
 
 class UnitParser(object):
-    unit_re = re.compile("(?P<unit>[a-zA-Z°Ωµ]+)\^?(?P<pow>[-+]?[0-9]*\.?[0-9]*)")
+    unit_re = re.compile("(?P<unit>[a-zA-Z°Ωµ%]+)\^?(?P<pow>[-+]?[0-9]*\.?[0-9]*)")
 
     def parse(self, unit: str) -> Unit:
         l_unit_s = self.unit_re.findall(unit)

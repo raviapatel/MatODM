@@ -152,7 +152,7 @@ class Database(ABC):
         else:
             return doc
         
-    def get_doc_with_key(self,collection_name:str,keyname:str,keyval:str,return_as_obj=True,*args,**kwargs):
+    def get_doc_with_key(self,collection_name:str,keyname:Union[str,int,bool,float],keyval:str,return_as_obj=True,*args,**kwargs):
         coll = self.get_collection(collection_name)
         doc = coll.get_doc_with_key(keyname,keyval,*args,**kwargs)
         if return_as_obj:
@@ -326,7 +326,7 @@ class DatabaseCollection(ABC):
         """
     
     @abstractmethod 
-    def get_doc_with_key(self,keyname:str,keyval:str)->dict:
+    def get_doc_with_key(self,keyname:str,keyval:Union[str,int,bool,float])->dict:
         """
         get document with a specific key 
         """
