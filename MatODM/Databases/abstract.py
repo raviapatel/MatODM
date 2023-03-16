@@ -1,11 +1,11 @@
  # -*- coding: utf-8 -*-
 from abc import ABC, abstractmethod 
 from datetime import datetime
-from .. import Documents as DocModule
+from .. import DataModels as DataModels
 from typing import Union, List
-ExampleDocTemplate = DocModule.ExampleDocTemplate 
-Document = DocModule.Document
-RangeQueryTemplate = DocModule.RangeQueryTemplate
+ExampleDocTemplate = DataModels.ExampleDocTemplate 
+Document = DataModels.Document
+RangeQueryTemplate = DataModels.RangeQueryTemplate
 from ..Fields import PhysicalQty
     
 class Database(ABC):
@@ -199,7 +199,7 @@ class Database(ABC):
         output = []
         for doc in cursor:
             doc_type = doc["ODM_doc_type"]
-            doc_class = getattr(DocModule,doc_type) 
+            doc_class = getattr(DataModels,doc_type) 
             output.append(doc_class.doc2obj(doc))
         return output
                 
