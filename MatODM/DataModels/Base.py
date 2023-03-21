@@ -53,7 +53,7 @@ class Base(metaclass = utl.MetaODM):
     relational_fields  = []
     #Field validators should raise TypeError  if the condition not satisfied
     #field validators are additional checks on the fields which are not covered by the field type
-    # field validators are called everytime the field is set  
+    # field validators are called everytime the field is set. User defined field validators should be subclass of FieldValidator
     field_validators = {}  
     #data validators are called during intialization of the object and serialization of the object. 
     #They typically raise TypeError if conditions not satisfied. This could be outlier detector models or something else  

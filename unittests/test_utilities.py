@@ -6,6 +6,7 @@ import sys
 sys.path.append("..")
 from MatODM import Utilities as utl
 from typing import Union,List,Dict,Tuple
+from MatODM import FieldValidators as fv
 from dataclasses import dataclass
 import unittest
 
@@ -40,7 +41,7 @@ class TestUtilites(unittest.TestCase):
           [(1,"one"),Tuple[int,int]],
              ]
         for val, dtype in tests:
-            with self.assertRaises(ValueError):
+            with self.assertRaises(fv.ValidationError):
                 utl.AnnotationChecker("test",dtype,val)
         #tests for type errors
         tests = [["2.", Union[int,float]],
@@ -48,7 +49,7 @@ class TestUtilites(unittest.TestCase):
                  [[1,2.], Union[List[int],List[float]]],
             ]
         for val, dtype in tests:
-            with self.assertRaises(TypeError):
+            with self.assertRaises(fv.ValidationError):
                 utl.AnnotationChecker("test",dtype,val)
         #more complex datatypes for check test  
         @dataclass
@@ -62,10 +63,10 @@ class TestUtilites(unittest.TestCase):
         self.assertNoError(utl.AnnotationChecker,"test", Union[Test,Test1],Test1(1.))
         self.assertNoError(utl.AnnotationChecker,"test", Union[Test,Test1],Test("1")) 
         #tests for wrong types- value error 
-        with self.assertRaises(ValueError):
+        with self.assertRaises(fv.ValidationError):
             utl.AnnotationChecker("test",List[Test],[1,2])
         #tests for wrong types- type error
-        with self.assertRaises(TypeError):
+        with self.assertRaises(fv.ValidationError):
             utl.AnnotationChecker("test",Union[Test,Test1],1.)
 
     def test_meta_odm(self):
@@ -80,7 +81,7 @@ class TestUtilites(unittest.TestCase):
         test.value = 5
         test.unit = "kg/m3"
         #this should cause error during dynamic type   checking
-        with self.assertRaises(TypeError):
+        with self.assertRaises(fv.ValidationError):
             test.value = "10"
 
     def test_meta_odm_user_defined_validation(self):

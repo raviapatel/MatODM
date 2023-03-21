@@ -4,6 +4,8 @@ import numpy as np
 from typing import Dict,Union,List,Any,_GenericAlias
 
 
+ValidationError = type("ValidationError", (Exception,), {})
+
 class FieldValidators:
     """Base class for all field validators"""
     def __init__(self,fieldname,*args,**kwargs):
@@ -23,11 +25,11 @@ class FieldValidators:
 
     def raise_type_error(self, expected_type:type,value:...):
         """Raise a validation error"""
-        raise TypeError("Field {} expects a value of type {} but got {}".format(self.fieldname, expected_type, type(value)))
+        raise ValidationError("ValidationError of type TypeError: Field {} -> expects a value of type {} but got {}".format(self.fieldname, expected_type, type(value)))
     
     def raise_value_error(self,message:str):
         """Raise a validation error"""
-        raise ValueError("Field {}: {}".format(self.fieldname, message))
+        raise ValidationError("ValidationError of type ValueError: Field {} -> {}".format(self.fieldname, message))
     
     @staticmethod
     def _dcode_unions(argtype):
@@ -357,6 +359,7 @@ class RangeValidator(FieldValidators):
             else:
                 if value >= self.max:
                     raise ValueError("RangeValidator expects a number lower than or equal to {}".format(self.max))
+        return value
 
     def json_schema(self):
         if self.min is None and self.max is None:
@@ -527,13 +530,13 @@ class RangeValidatorForArray(FieldValidators):
             else:
                 return {"type": "array", "items": {"type": "number", "minimum": self.min, "maximum": self.max}}
     
-class ArrayUniqueValidator(FieldValidators):
+class ArrayUniqueItemsValidator(FieldValidators):
     """Validate a list with only unique elements"""
     def __call__(self,value):
         arrayvalidator = ArrayValidator(self.fieldname)
         value = arrayvalidator(value)
         if len(value) != len(np.unique(value)):
-            self.raise_value_error("ArrayUniqueValidator expects a list with unique elements")
+            self.raise_value_error("ArrayUniqueItemsValidator expects a list with unique elements")
         return value
     
     def json_schema(self):
@@ -577,7 +580,7 @@ class ISBN10Validator(FieldValidators):
     def __call__(self, value):
         if not isinstance(value, str):
             self.raise_type_error(str,value)
-        if not re.match(r"^\d{9}[\dX]$", value, re.IGNORECASE):
+        if not re.match(r"^\d{9}[\dX]$", value.replace("-",""), re.IGNORECASE):
             self.raise_value_error("ISBN10Validator expects a valid ISBN-10")
         return value
     
@@ -592,7 +595,7 @@ class ISBN13Validator(FieldValidators):
     def __call__(self, value):
         if not isinstance(value, str):
             self.raise_type_error(str,value)
-        if not re.match(r"^\d{13}$", value, re.IGNORECASE):
+        if not re.match(r"^\d{13}$", value.replace("-",""), re.IGNORECASE):
             self.raise_value_error("ISBN13Validator expects a valid ISBN-13")
         return value
     
@@ -613,3 +616,4 @@ class colorValidator(FieldValidators):
     
     def json_schema(self):
         return {"type": "string", "pattern": r"^#[0-9a-f]{6}$"}
+
